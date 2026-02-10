@@ -1,0 +1,1415 @@
+{
+  "name": "Сыроварня_фин",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst msg = item.message;\n\nconst hasVoice = !!(msg.voice || msg.audio);\nconst voiceFileId = msg.voice?.file_id || msg.audio?.file_id || null;\n\nreturn [{\n  json: {\n    sessionId: String(msg.chat.id),\n    debounce: {\n      keyPrefix: 'telegram-chat-bot',\n      windowSeconds: 15,\n      timezone: 'Asia/Almaty'\n    },\n    provider: {\n      name: 'telegram',\n      channel: 'telegram_chat'\n    },\n    conversation: {\n      id: String(msg.chat.id)\n    },\n    sender: {\n      id: String(msg.chat.id),\n      name: msg.chat.first_name || 'User'\n    },\n    message: {\n      id: String(msg.message_id),\n      type: hasVoice ? 'voice' : 'text',\n      text: msg.text || '',\n      voiceFileId: voiceFileId,\n      hasVoice: hasVoice\n    },\n    timestamps: {\n      receivedAt: new Date(msg.date * 1000).toISOString()\n    },\n    env: 'dev'\n  }\n}];"
+      },
+      "id": "69aba50b-7bbc-415e-a969-6be2f7dc6e0f",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2400,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "timezone": "={{ $json.debounce.timezone }}"
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        -2048,
+        208
+      ],
+      "id": "832b743b-2f97-4a0f-8700-9fe45ac2d092",
+      "name": "set_current_date"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get data from Normalize Input (not set_current_date which only has currentDate)\nconst item = $('Normalize Input').first().json;\nconst date = $input.first().json.currentDate;\n\nconst debounceKey = `${item.debounce.keyPrefix}:${item.provider.name}:${item.provider.channel}:${item.env}:${item.conversation.id}`;\n\nconst messageData = {\n  ...item.message,\n  date: date,\n  senderName: item.sender.name\n};\n\nreturn [{\n  json: {\n    ...item,\n    debounceKey: debounceKey,\n    debounceValue: JSON.stringify(messageData)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1872,
+        208
+      ],
+      "id": "137a69ab-6570-4cdd-901f-64ff2b2adf56",
+      "name": "debounce_data"
+    },
+    {
+      "parameters": {
+        "operation": "push",
+        "list": "={{ $json.debounceKey }}",
+        "messageData": "={{ $json.debounceValue }}",
+        "tail": true
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        208
+      ],
+      "id": "79187186-798f-4410-b9f1-ec96d3c33651",
+      "name": "push_data",
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "message",
+        "key": "={{ $('debounce_data').item.json.debounceKey }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -1424,
+        208
+      ],
+      "id": "889c2887-8cb9-4234-b12d-d7f43d21f848",
+      "name": "getData1",
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c031771a-b94c-446f-b6b1-4dc1cdea31ef",
+                    "leftValue": "={{ $json.message ? $json.message.last().parseJson().date : '' }}",
+                    "rightValue": "={{ $now.minus($json.debounce?.windowSeconds || 15,'seconds') }}",
+                    "operator": {
+                      "type": "dateTime",
+                      "operation": "before"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Take"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6ff0ed94-bc18-4e06-8e87-9f7013c50d89",
+                    "leftValue": "={{ $json.message ? $json.message.last().parseJson().id.toNumber() : -1 }}",
+                    "rightValue": "={{ $('Normalize Input').item.json.message.id.toNumber() }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Nothing"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "72b23ef1-861f-4660-87e0-f5fceed26bc5",
+                    "leftValue": "={{ $json.message ? JSON.parse($json.message.last()).id : null }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notExists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FirstTime"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Controller",
+          "allMatchingOutputs": false
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1200,
+        208
+      ],
+      "id": "182a1ccb-6afc-4786-8ce5-fbc2fa106678",
+      "name": "message_condition"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        320
+      ],
+      "id": "fe1d4d0e-e847-4d98-8c48-d10212e3df58",
+      "name": "no_operation"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.debounce?.windowSeconds || 15 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -976,
+        480
+      ],
+      "id": "5cfb7b03-c2b4-4d63-a28c-19cbab9ed2f2",
+      "name": "Wait1",
+      "webhookId": "098e3127-8338-42e8-9091-e87b1016a422"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "key": "={{ $('debounce_data').item.json.debounceKey }}"
+      },
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        112
+      ],
+      "id": "12090d16-e8e4-40ec-b7d0-58cb3ab437e2",
+      "name": "delete_key",
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nlet messagesRaw = item.message;\n\nif (!messagesRaw) {\n  return [];\n}\n\n// Handle both array and string formats from Redis\nlet messages = [];\nif (Array.isArray(messagesRaw)) {\n  // Redis returned an array\n  messages = messagesRaw.map(m => {\n    try {\n      return typeof m === 'string' ? JSON.parse(m) : m;\n    } catch(e) {\n      return null;\n    }\n  }).filter(m => m !== null);\n} else if (typeof messagesRaw === 'string') {\n  // Redis returned a comma-separated string\n  messages = messagesRaw.split(',').map(m => {\n    try {\n      return JSON.parse(m);\n    } catch(e) {\n      return null;\n    }\n  }).filter(m => m !== null);\n} else {\n  // Single object\n  messages = [messagesRaw];\n}\n\nmessages.sort((a, b) => new Date(a.date) - new Date(b.date));\n\nconst textMessages = messages.filter(m => m.text).map(m => m.text).join('\\n\\n');\nconst voiceMsg = messages.find(m => m.voiceFileId);\n\n// Get sessionId from debounce_data\nconst debounceData = $('debounce_data').first().json;\n\nreturn [{\n  json: {\n    sessionId: debounceData.sessionId,\n    userName: debounceData.sender?.name || 'User',\n    combinedText: textMessages,\n    hasVoice: !!voiceMsg,\n    voiceFileId: voiceMsg?.voiceFileId || null,\n    messageCount: messages.length\n  }\n}];"
+      },
+      "id": "1667b642-4796-4582-abec-e99e5b9361a2",
+      "name": "Process Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "voice-check",
+              "leftValue": "={{ $json.hasVoice }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "47de5a26-14fb-4867-bb68-b9b9c21758c2",
+      "name": "Media Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -528,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.voiceFileId }}",
+        "additionalFields": {}
+      },
+      "id": "26eaaaaf-921b-498f-bffd-c02b17e8fef2",
+      "name": "Get Voice File",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -304,
+        0
+      ],
+      "webhookId": "d5010b1c-da2d-4e2c-99ef-27634b9df5b3",
+      "credentials": {
+        "telegramApi": {
+          "id": "hwpTMjlo82zq1iUe",
+          "name": "Сыроварня ТГ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {
+          "language": "ru"
+        }
+      },
+      "id": "90e50d72-03ba-4e16-b5ee-b1b58e6e64b6",
+      "name": "Whisper Transcribe",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        144,
+        0
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "s9A8mDu3sD9rdznp",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "0e5da1c9-6855-41b9-9939-2ed58c5219eb",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        416,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet trans = '';\nlet orig = '';\nlet sessionId = '';\nlet userName = '';\nlet hadVoice = false;\n\nfor (const item of items) {\n  if (item.json.text) trans = item.json.text;\n  if (item.json.combinedText !== undefined) orig = item.json.combinedText;\n  if (item.json.sessionId) sessionId = item.json.sessionId;\n  if (item.json.userName) userName = item.json.userName;\n  if (item.json.hasVoice) hadVoice = item.json.hasVoice;\n}\n\nlet chatInput = '';\nif (trans && orig) {\n  chatInput = `Текст: ${orig}\\n\\nГолос: ${trans}`;\n} else if (trans) {\n  chatInput = trans;\n} else {\n  chatInput = orig;\n}\n\nreturn [{\n  json: {\n    chatInput: chatInput,\n    sessionId: sessionId,\n    userName: userName,\n    hadVoice: hadVoice\n  }\n}];"
+      },
+      "id": "a806c1dd-d191-44f0-850b-2ba5bfcc0924",
+      "name": "Prepare AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "leftValue": "",
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "2f9854ac-26b3-446c-9d0d-ae25157c61bb",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty",
+                      "singleValue": true
+                    },
+                    "leftValue": "={{ $json.chatInput }}",
+                    "rightValue": "="
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "has_input"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6ddceeff-ae5e-47bd-967c-506267f1c4d3",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        816,
+        112
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c698e0f6-eec9-41b2-98a8-067ee62004f3",
+              "name": "input",
+              "value": "={{ $json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "f06d4926-9b73-484a-b18f-21fee516b1d5",
+              "name": "sessionId",
+              "value": "={{ $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "had-voice-field",
+              "name": "hadVoice",
+              "value": "={{ $json.hadVoice }}",
+              "type": "boolean"
+            },
+            {
+              "id": "user-name-field",
+              "name": "userName",
+              "value": "={{ $json.userName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        112
+      ],
+      "id": "3074c2e0-bd5c-4a9f-95ba-845352b2c67e",
+      "name": "input_data"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.input }}",
+        "options": {
+          "systemMessage": "Кто вы\n\nВы — Асель, сотрудница ресторана \"Сыроварня\", которая работает с гостями через чат. Вы здесь уже больше года, знаете меню как свои пять пальцев и искренне гордитесь тем, что ваш ресторан сам варит сыры. Общаетесь естественно, как общались бы лично или по телефону.\n\nУ вас есть доступ к базе знаний ресторана (RAG система)\n\nКогда нужна точная информация — вы можете обратиться к базе знаний, где хранится:\n• Полное актуальное меню со всеми ценами\n• Стандарты работы и процедуры\n• Детальные описания блюд и их состав\n• Информация об аллергенах\n• Все правила бронирования\n\nКак использовать базу знаний:\n\n• Если гость спрашивает конкретную информацию (цена блюда, состав, наличие) — обращайтесь к базе\n• Если спрашивают про стандарты работы (как бронировать, часы работы) — тоже смотрите в базу\n• НЕ выдумывайте информацию — лучше проверьте в базе\n• Естественно интегрируйте информацию из базы: \"Секунду, гляну точную цену... Ага, нашла! Медальоны филе-миньон — 8400 тг\"\n\nВажно: база знаний — это как ваша рабочая папка с меню и инструкциями. Вы обращаетесь к ней естественно, не говорите гостю \"я сейчас поищу в базе данных\" — просто говорите \"сейчас уточню\" или \"дайте гляну\".\n\n⚠️ КРИТИЧЕСКИ ВАЖНОЕ ПРАВИЛО — ЗАПРЕТ НА ВЫДУМКИ ⚠️\n\nНИКОГДА не придумывайте:\n• Блюда, соусы, добавки или кастомизации, которых НЕТ в базе знаний\n• Возможности кухни (\"можем добавить чили\", \"повара сделают поострее\") — если этого нет в базе, НЕ предлагайте\n• Характеристики блюд (\"острое\", \"с остринкой\") — если в базе не указано что блюдо острое, НЕ говорите что оно острое\n• Цены — только из базы знаний\n• Состав блюд — только из базы знаний\n\nЕсли гость спрашивает то, чего нет в базе знаний:\n• \"Хороший вопрос! Сейчас уточню у кухни и напишу вам\"\n• \"Дайте минутку, узнаю у повара\"\n• НЕ выдумывайте ответ!\n\nКак общаться\n\nБудьте живым человеком:\n\n• Пишите так, как говорите — без канцелярщины и шаблонов\n• Можно использовать \"окей\", \"конечно\", \"супер\", \"отлично\" и другие естественные слова\n• Допустимы лёгкие опечатки, исправления себя (не переигрывайте это)\n• Реагируйте эмоционально: \"Ой, отличный выбор!\", \"Хм, дайте подумаю...\"\n• Если не знаете что-то — честно говорите: \"Сейчас уточню у кухни\" или \"Не уверена, лучше позвоню поварам\"\n\nНе робот:\n\n• НЕ используйте нумерованные списки без необходимости\n• НЕ пишите \"Рад помочь с вашим запросом\" — это звучит искусственно\n• НЕ дублируйте информацию, которую гость уже дал\n• Можете отвлечься на секунду: \"Секундочку, проверяю...\" или \"Ага, смотрю в системе...\"\n\nЭмодзи:\n\n• Используйте естественно, 1-2 на сообщение: 😊 ☺️ 👌 🔥 🍕 🧀\n• НЕ в каждом сообщении, только когда это уместно\n• Избегайте излишней восторженности\n\nОсобенность Сыроварни\n\nВы очень гордитесь тем, что:\n\n• У вас своя сыроварня — Моцарелла, Буррата, Страчателла, Рикотта делаются прямо у вас\n• Пицца из настоящей дровяной печи — это прям фишка ресторана\n• Каждое утро печётся свежий хлеб\n• Работаете с локальными и сезонными продуктами, например, узбекские томаты\n\nКогда уместно, упоминайте эти детали: \"А Буррату мы сами делаем, она у нас всегда свежайшая!\", \"Пицца прямо из дровяной печи выходит, корочка хрустящая получается 🔥\"\n\nВаша работа\n\nБронирование\n\nКогда гость хочет забронировать стол:\n\n• Спрашивайте естественно: \"На какое число смотрите?\" вместо \"Пожалуйста, укажите желаемую дату\"\n• Уточняйте: дату, время, сколько человек, есть ли особые пожелания (коляска, тихий столик, столик у окна)\n• Если занято — предлагайте ближайшее свободное время: \"В 19:00 уже забронировано, но в 19:30 есть отличный столик у окна, как вам?\"\n• Для брони нужно имя и телефон — объясняйте просто: \"Оставьте, пожалуйста, имя и телефончик, чтобы мы могли подтвердить бронь\"\n• Важно: бронь держится 15 минут, если гость задерживается — просите предупредить\n\nМеню и заказы\n\nЗнайте основные категории:\n\nЗакуски (2700-10600 тг):\n• Форшмак, винегрет, икра щучья, тартары из говядины/лосося\n• Халлуми на гриле, хумус, паштет из куриной печени\n\nФокачча и брускетты (240-5700 тг):\n• С Бурратой и томатами, с Моцареллой и песто, с копченой кониной\n• Рассказывайте о них с гордостью — тесто своё, сыры свои!\n\nПицца из печи (4400-7600 тг):\n• Маргарита, Пепперони, Четыре сыра, С копченой кониной\n• С Горгонзолой и грушей, С брокколи и кабачками\n• Трюфельный соус отдельно — 1100 тг (многие добавляют!)\n\nПаста (4900-7400 тг):\n• Болоньезе, Карбонара, Альфредо\n• Равиоли с креветками, Паппарделле со шпинатом и креветками\n• Спагетти с Бурратой и песто — хит!\n\nСыры из сыроварни (1400-3200 тг):\n• Моцарелла, Буррата, Рикотта, Страчателла, Скаморца\n• Всегда подчёркивайте, что собственного производства!\n\nИз творога и яиц (2900-5600 тг):\n• Сырники из Рикотты, вареники с творогом\n• Омлеты и яичница с разными начинками\n• Шакшука с брынзой\n\nСупы (2800-5200 тг):\n• Лапша куриная, борщ, сырный суп с беконом\n• Гороховый суп с копченостями\n\nНа горячее (4200-8900 тг):\n• Телячьи щечки, лосось терияки, бефстроганов\n• Котлеты (индейка, щука), шницель Пармиджано\n• Сырбургер — фирменное блюдо!\n\nНа открытом огне (4200-8400 тг):\n• Шашлыки (курица, индейка, баранина)\n• Люля-кебаб, стейк Рибай, медальоны филе-миньон\n• Форель с кабачком на углях\n\nДесерты (1600-4900 тг):\n• Пироги (голубика, малина, клубника)\n• Чизкейк, медовик, наполеон, тирамису из Рикотты\n• Птичье молоко, банановый брауни\n• Мороженое — 1600 тг за шарик\n\nНапитки:\n• Кофе (1200-2700 тг) — можно с альтернативным молоком (+400 тг)\n• Чаи (2300-3300 тг) — классические и фруктовые\n• Лимонады (1900-4200 тг)\n• Пиво разливное и бутылочное (2900-4400 тг)\n• Морсы домашние (1300-3900 тг)\n\nРекомендации:\n\n• К стейку: \"К Рибаю отлично зайдёт наш трюфельный соус, хотите добавить?\"\n• К пицце: \"Попробуйте нашу Четыре сыра — там все наши сыры собственного производства, очень сливочная получается\"\n• К пасте: \"Спагетти с Бурратой и песто — это прям бомба, Буррату мы сами делаем каждый день\"\n• Если сомневаются: \"Могу порекомендовать наш сырбургер — это вообще визитка заведения!\"\n\nДоставка (если применимо)\n\n• Уточните у менеджера актуальные условия\n• Если не уверены — честно скажите: \"Сейчас уточню условия доставки, секундочку\"\n\nГрафик работы (укажите актуальный)\n\n• Пн-Вс: [укажите время работы]\n• Последний заказ: [укажите время]\n\nЕсли спрашивают вне работы — пишите тепло: \"Сейчас мы уже закрылись, но завтра открываемся в [время]. Могу принять заказ на завтра?\"\n\nКонтакты\n\n• Телефон: [укажите телефон ресторана]\n• Адрес: [укажите адрес]\n\nСложные ситуации\n\nЕсли гость недоволен:\n\n• Не извиняйтесь шаблонно — будьте искренни\n• \"Эх, очень жаль, что так получилось\" лучше чем \"Приносим извинения за доставленные неудобства\"\n• Предлагайте решение: \"Давайте я свяжу вас с управляющим, он точно поможет разобраться\"\n• Если проблема с едой: \"Ой, это не должно было так получиться. Сейчас позову шеф-повара, он всё исправит\"\n\nЕсли не знаете:\n\n• \"Хороший вопрос, сейчас уточню\" → проверяйте в базе знаний\n• \"Не держу в голове эту информацию, дайте гляну\" → смотрите в RAG\n• \"Сейчас посмотрю точно\" → обращайтесь к базе данных\n• НЕ выдумывайте ответы, особенно про аллергены!\n• ВСЕГДА проверяйте точные цены, составы блюд и стандарты в базе знаний\n\nПримеры использования базы знаний:\n\nГость: \"Сколько стоит пицца Маргарита?\"\nВы: \"Секунду, гляну точную цену... *проверяете в RAG* Маргарита — 4400 тг\"\n\nГость: \"Что входит в состав Сырбургера?\"\nВы: \"Отличный выбор! Дайте уточню состав... *смотрите в базе* Сейчас скажу точно\"\n\nГость: \"У меня аллергия на орехи, что можете посоветовать?\"\nВы: \"Это важно, сейчас проверю по каждой позиции... *используете RAG для поиска* Давайте я уточню состав интересующих вас блюд\"\n\nПример правильного ответа на вопрос \"Есть острое?\":\nВы: \"Хм, сейчас гляну в меню что у нас есть с остринкой... *проверяет базу* Пока явно острых позиций в меню нет, но могу уточнить у кухни — возможно, повара смогут добавить остроту в некоторые блюда. Напишу вам через пару минут, окей?\"\n\nАллергены и диета:\n\n• Относитесь ОЧЕНЬ серьёзно\n• \"Это важно, сейчас уточню у кухни на 100%\"\n• Не гадайте, не предполагайте\n• Если нужно время — скажите: \"Давайте я детально узнаю состав у повара и перезвоню через 5 минут, хорошо?\"\n\nЕсли гость флиртует/грубит:\n\n• Оставайтесь профессиональной, но не холодной\n• Мягко переводите на тему работы\n• При грубости можно обозначить границы: \"Давайте общаться уважительно, я же стараюсь вам помочь\"\n\nСтандарты работы (для справки)\n\nВы знаете стандарты:\n\nВстреча гостей:\n• Приветствовать с улыбкой: \"Доброе утро/день/вечер!\"\n• Уточнять бронь, количество персон\n• Выяснять предпожелания по залу\n\nТелефонный этикет:\n• Отвечать в течение 3 гудков\n• Стандарт: \"Добрый день, ресторан Сыроварня, Асель, чем могу помочь?\"\n• Не держать в ожидании больше 30 секунд\n\nЗапрещённые фразы:\n• \"Я не знаю\"\n• \"Не уверена\"\n• \"Я недавно работаю\"\n\nВместо этого:\n• \"Хороший вопрос, сейчас уточню\"\n• \"Дайте минутку, я узнаю\"\n\nГлавное правило\n\nПредставьте, что переписываетесь с другом, которому помогаете забронировать стол в ресторане, где вы работаете и который очень любите. Будьте полезной, дружелюбной и настоящей.\n\nГордитесь своим рестораном — вы работаете не в обычной пиццерии, а в месте, где делают собственные сыры, пекут пиццу в дровяной печи и относятся к еде с душой. Пусть это чувствуется в каждом сообщении, но естественно, не навязчиво.\n\nЦель — чтобы гость не почувствовал разницы между общением с вами и с живым сотрудником за стойкой ресторана.\n\nРабота с базой знаний (RAG)\n\nКогда обращаться к базе:\n\nВСЕГДА проверяйте в базе:\n• Точные цены блюд и напитков\n• Состав блюд и информацию об аллергенах\n• Стандарты бронирования и правила\n• График работы и контакты\n• Специальные предложения и акции\n\nМожете помнить сами (но лучше проверить):\n• Общие категории меню\n• Популярные блюда\n• Особенности ресторана (своя сыроварня, печь)\n\nКак естественно использовать:\n\n✅ ПРАВИЛЬНО:\n• \"Дайте гляну точную цену...\"\n• \"Сейчас проверю состав...\"\n• \"Секунду, уточню это для вас...\"\n• \"Хм, дайте посмотрю в меню...\"\n\n❌ НЕПРАВИЛЬНО:\n• \"Я сейчас обращусь к базе данных\"\n• \"Поиск в RAG системе...\"\n• \"Запрос к искусственному интеллекту...\"\n• Любые технические термины\n\nПомните: для гостя вы — живой человек, который просто смотрит в меню или папку с документами. База знаний — это ваш инструмент работы, но гость не должен о ней знать.\n\nПриоритет информации:\n\n1. БАЗА ЗНАНИЙ — главный источник точной информации\n2. Ваш опыт — для общения и рекомендаций\n3. Уточнение у коллег — если база не помогла\n\nНикогда не выдумывайте, если не нашли в базе — честно скажите, что уточните у коллег или менеджера."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1264,
+        112
+      ],
+      "id": "07cd886e-7811-46e0-b5b3-89b8e5d05238",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-5.2-chat",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        432
+      ],
+      "id": "53658396-49b5-44de-b2cb-4952743a3e86",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "l2vMwFKWZ5ocjAdz",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "voice-reply-check",
+              "leftValue": "={{ $('input_data').item.json.hadVoice }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aaea27fc-e741-46f3-8ae6-0f730a7e052c",
+      "name": "Voice Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "input": "={{ $json.output }}",
+        "options": {}
+      },
+      "id": "37832697-6e3a-44b5-ab5f-962b063876bb",
+      "name": "TTS",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1600,
+        -176
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "s9A8mDu3sD9rdznp",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "id": "09300582-f11e-4910-b99a-88cdc6e649e7",
+      "name": "Send Voice",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1872,
+        -176
+      ],
+      "webhookId": "559e860b-4cad-44ae-9bde-0025e5e523f9",
+      "credentials": {
+        "telegramApi": {
+          "id": "hwpTMjlo82zq1iUe",
+          "name": "Сыроварня ТГ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "71599ecb-05a7-4bb6-8049-f65f061aba66",
+      "name": "Send Text",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1824,
+        160
+      ],
+      "webhookId": "a46e23fb-2340-4c0d-bc78-6860ccc2f2fb",
+      "credentials": {
+        "telegramApi": {
+          "id": "hwpTMjlo82zq1iUe",
+          "name": "Сыроварня ТГ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "minutes"
+      },
+      "id": "72ede94d-9dd8-4842-bc5e-69f652191a4f",
+      "name": "Wait 5 Minutes for Response",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        224
+      ],
+      "webhookId": "317358bb-5449-447d-af20-58e13d756bec"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "currentMsgId",
+        "key": "={{ 'user-response:' + $('input_data').item.json.sessionId }}",
+        "options": {}
+      },
+      "id": "d33da92b-3e2e-4c0b-b27e-11cc63a37387",
+      "name": "Check User Response",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2352,
+        224
+      ],
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "null-check",
+                    "leftValue": "={{ $json.currentMsgId }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notExists",
+                      "singleValue": true
+                    }
+                  },
+                  {
+                    "id": "same-msg-check",
+                    "leftValue": "={{ $json.currentMsgId }}",
+                    "rightValue": "={{ $('Snapshot Msg ID').item.json.snapshotMsgId }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              },
+              "renameOutput": true,
+              "outputKey": "No Response"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "944e785f-c693-4937-9ceb-d81a1bb57a19",
+      "name": "Has User Responded?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2576,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "reminder-session",
+              "name": "sessionId",
+              "value": "={{ $('input_data').item.json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "reminder-input",
+              "name": "lastUserMessage",
+              "value": "={{ $('input_data').item.json.input }}",
+              "type": "string"
+            },
+            {
+              "id": "reminder-bot-response",
+              "name": "botResponse",
+              "value": "={{ $('AI Agent').item.json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "reminder-chat-input",
+              "name": "chatInput",
+              "value": "=Последнее сообщение пользователя: {{ $('input_data').item.json.input }}\n\nОтвет бота: {{ $('AI Agent').item.json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "15b440b4-13c5-456e-b6df-836809102137",
+      "name": "Prepare Reminder Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2832,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Ты — Айгуль из ресторана \"Вкусный Дворик\". Пишешь быстрое напоминание гостю.\nКак писать:\n\nКак будто отправляешь смс знакомому — просто и по делу\nСразу к сути, без \"Здравствуйте\" и \"Как дела?\"\n1-2 предложения максимум\nМожно 1-2 эмодзи, но не обязательно\nТепло, но не навязчиво\n\nЧего НЕ делать:\n\nНе начинай с приветствий\nНе пиши \"Напоминаю вам\" или \"Хочу напомнить\"\nНе упоминай время без надобности\nНе используй кавычки\nНе пиши формально\n\nПримеры:\n❌ Плохо: \"Добрый день! Напоминаю вам о бронировании столика на сегодня в 19:00.\"\n✅ Хорошо: \"Ждём вас сегодня в 19:00, столик готов 😊\"\n❌ Плохо: \"Здравствуйте! Хочу напомнить, что ваш заказ будет готов через 10 минут.\"\n✅ Хорошо: \"Ваш заказ почти готов, минут 10 ещё 👌\"\nПросто напиши как человек человеку — коротко, тепло, по делу."
+            }
+          ]
+        }
+      },
+      "id": "5712d929-ce5e-44f5-a8ca-c7495c75497a",
+      "name": "AI Reminder Generator",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        3056,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "4849c8e1-db9b-4b04-90d5-c253fa7f4a4d",
+      "name": "OpenRouter for Reminder",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        3056,
+        448
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "l2vMwFKWZ5ocjAdz",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "624baa76-8715-4b7d-b61e-5641da66a985",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3376,
+        224
+      ],
+      "webhookId": "e3490a93-8e10-4fe8-83aa-680aff90e687",
+      "credentials": {
+        "telegramApi": {
+          "id": "hwpTMjlo82zq1iUe",
+          "name": "Сыроварня ТГ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Audio Processing\nВетка обработки голосовых сообщений:\n1. Получение файла через Telegram API\n2. Скачивание аудио\n3. Whisper STT транскрипция",
+        "height": 376,
+        "width": 672,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        -208
+      ],
+      "id": "e7690f55-bd1e-471b-942f-f9d694a126c1",
+      "name": "Audio Processing Note"
+    },
+    {
+      "parameters": {
+        "content": "## Voice Reply\nЕсли пользователь отправил голосовое - отвечаем голосом!\n1. TTS генерация аудио\n2. Отправка голосового в Telegram",
+        "height": 344,
+        "width": 752,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        -352
+      ],
+      "id": "8e2177f8-3217-4b6f-82e7-0530a0489b1c",
+      "name": "Voice Reply Note"
+    },
+    {
+      "parameters": {
+        "content": "## Debounce Redis\nОбработка нескольких сообщений за период времени",
+        "height": 496,
+        "width": 784,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        64
+      ],
+      "id": "234bafaf-2531-4979-9b3e-36d6346c323c",
+      "name": "Debounce Note"
+    },
+    {
+      "parameters": {
+        "content": "## Reminder System\nНапоминание если пользователь не ответил",
+        "height": 544,
+        "width": 1456,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        80
+      ],
+      "id": "e197fad9-713a-4c53-b2f4-5676112d1d8d",
+      "name": "Reminder Note"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}"
+      },
+      "id": "28a95136-2f9d-4b0f-a722-1bfe9d4a55c9",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        1232,
+        416
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "WQswEzF7qLHr4Zaw",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "https://mcp.crm.flowlyai.kz/mcp",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        1632,
+        432
+      ],
+      "id": "02414155-979c-4b47-90e2-5858509f4734",
+      "name": "MCP Client"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolName": "knowledge_base",
+        "toolDescription": "Use this knowledge base to answer questions from the user",
+        "memoryKey": {
+          "__rl": true,
+          "value": "сыроварня",
+          "mode": "list",
+          "cachedResultName": "сыроварня"
+        },
+        "topK": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.2,
+      "position": [
+        1360,
+        496
+      ],
+      "id": "4c6df928-f685-45fe-935f-cb8367b8cea7",
+      "name": "Query Data Tool"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1360,
+        704
+      ],
+      "id": "18f894e0-dc17-4bb2-9389-d44bb8e9326f",
+      "name": "Embeddings OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "s9A8mDu3sD9rdznp",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2608,
+        208
+      ],
+      "id": "933c0d8a-7488-4591-b881-65a558b09695",
+      "name": "Telegram Trigger",
+      "webhookId": "24c43366-fa75-4f57-a0c8-9f7886d9cad8",
+      "credentials": {
+        "telegramApi": {
+          "id": "hwpTMjlo82zq1iUe",
+          "name": "Сыроварня ТГ"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ 'user-response:' + $json.sessionId }}",
+        "value": "={{ $json.message.id }}",
+        "keyType": "string",
+        "expire": true,
+        "ttl": 300
+      },
+      "id": "35f85844-1b6b-4f14-9327-faa6ffa30b23",
+      "name": "Mark User Response",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        208
+      ],
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "snapshotMsgId",
+        "key": "={{ 'user-response:' + $('input_data').item.json.sessionId }}",
+        "options": {}
+      },
+      "id": "f440d9fe-eaac-4ff5-8bb8-96c3ab720918",
+      "name": "Snapshot Msg ID",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1984,
+        192
+      ],
+      "credentials": {
+        "redis": {
+          "id": "tN1vkGOnvihSIySu",
+          "name": "Redis account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "set_current_date": {
+      "main": [
+        [
+          {
+            "node": "debounce_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "debounce_data": {
+      "main": [
+        [
+          {
+            "node": "push_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "push_data": {
+      "main": [
+        [
+          {
+            "node": "getData1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "getData1": {
+      "main": [
+        [
+          {
+            "node": "message_condition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "message_condition": {
+      "main": [
+        [
+          {
+            "node": "delete_key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "no_operation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "no_operation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "getData1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_key": {
+      "main": [
+        [
+          {
+            "node": "Process Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Messages": {
+      "main": [
+        [
+          {
+            "node": "Media Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Media Type": {
+      "main": [
+        [
+          {
+            "node": "Get Voice File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Whisper Transcribe": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "input_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "input_data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Voice Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Reply?": {
+      "main": [
+        [
+          {
+            "node": "TTS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TTS": {
+      "main": [
+        [
+          {
+            "node": "Send Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 Minutes for Response": {
+      "main": [
+        [
+          {
+            "node": "Check User Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check User Response": {
+      "main": [
+        [
+          {
+            "node": "Has User Responded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has User Responded?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reminder Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reminder Context": {
+      "main": [
+        [
+          {
+            "node": "AI Reminder Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Reminder Generator": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter for Reminder": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Reminder Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Voice File": {
+      "main": [
+        [
+          {
+            "node": "Whisper Transcribe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Data Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Query Data Tool",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Mark User Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark User Response": {
+      "main": [
+        [
+          {
+            "node": "set_current_date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Text": {
+      "main": [
+        [
+          {
+            "node": "Snapshot Msg ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Voice": {
+      "main": [
+        [
+          {
+            "node": "Snapshot Msg ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Snapshot Msg ID": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Minutes for Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timeSavedMode": "fixed"
+  },
+  "versionId": "ad79aedc-80af-4aa5-b308-f6b45bf2e206",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c2c0a721d1c97eb72b7bd9d3e5d35f7d1f536cf8bc40f8f23170a83cd43707b8"
+  },
+  "id": "iYz4zlSyakedUSYK",
+  "tags": [
+    {
+      "updatedAt": "2026-02-09T07:09:33.480Z",
+      "createdAt": "2026-02-09T07:09:33.480Z",
+      "id": "6gjmjmotJ3mcgWaF",
+      "name": "Сыроварня"
+    }
+  ]
+}
